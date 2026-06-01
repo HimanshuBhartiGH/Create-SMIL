@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>SMIL Generator</title>
+<link rel="stylesheet" type="text/css" href="./css/main3.css" />
+</head>
+<body>
+<h1>SMIL File Generator</h1>
+<h2>1. Upload HTML File 2. Paste Audio Labels (start end per line). Download SMIL File<h2>
+<input type="file" id="htmlFile" accept=".html">
+<textarea id="audioLabels" rows="10" placeholder="0 1.285&#10;1.287 2.899"></textarea>
+<button id="convertBtn">Convert to SMIL</button>
+<div id="error"></div>
+<a id="downloadLink" download>Download SMIL File</a>
+<p class="name" style="position:fixed;right:30px;bottom:0px;font-size:90%;">Himanshu</p>
+  <script>
+    let htmlFileName = '';
+    let wordIds = [];
+
+    document.getElementById('htmlFile').addEventListener('change', function(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      htmlFileName = file.name;
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+        const htmlText = e.target.result;
+
+        // Extract all <span id="..."> values
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+        const spans = doc.querySelectorAll('span[id]');
+        wordIds = Array.from(spans).map(span => span.id);
+      };
+
+      reader.readAsText(file);
+    });
+
+    document.getElementById('convertBtn').addEventListener('click', function () {
+      const errorDiv = document.getElementById('error');
+      errorDiv.textContent = '';
+      const downloadLink = document.getElementById('downloadLink');
+      downloadLink.style.display = 'none';
+
+      if (!htmlFileName) {
+        errorDiv.textContent = 'Please upload an HTML file.';
+        return;
+      }
+
+      if (wordIds.length === 0) {
+        errorDiv.textContent = 'No <span id="..."> found in the HTML file.';
+        return;
+      }
+
+      const labelText = document.getElementById('audioLabels').value.trim();
+      if (!labelText) {
+        errorDiv.textContent = 'lease paste audio label data.';
+        return;
+      }
+
+      const labelLines = labelText.split('\n');
+      const timings = [];
+
+      for (let line of labelLines) {
+        const parts = line.trim().split(/\s+/); // Split by whitespace or tab
+        if (parts.length !== 2) {
+          errorDiv.textContent = `Invalid label format: "${line}"`;
+          return;
+        }
+        const startMs = Math.floor(parseFloat(parts[0]) * 1000);
+        const endMs = Math.floor(parseFloat(parts[1]) * 1000);
+        if (isNaN(startMs) || isNaN(endMs)) {
+          errorDiv.textContent = `Invalid numbers in label: "${line}"`;
+          return;
+        }
+        timings.push({ start: startMs + 'ms', end: endMs + 'ms' });
+      }
+
+      if (wordIds.length !== timings.length) {
+        errorDiv.textContent = `Word count (${wordIds.length}) and label count (${timings.length}) do not match.`;
+        return;
+      }
+
+      const baseName = htmlFileName.replace(/\.html$/, '');
+      const smilLines = [
+        '<?xml version="1.0" encoding="utf-8"?>',
+        '<smil xmlns="http://www.w3.org/ns/SMIL" xmlns:epub="http://www.idpf.org/2007/ops" version="3.0">',
+        '<body>'
+      ];
+
+      for (let i = 0; i < wordIds.length; i++) {
+        smilLines.push(
+          `<par><text src="../html/${baseName}/${htmlFileName}#${wordIds[i]}"/><audio src="${baseName}.mp3" clipBegin="${timings[i].start}" clipEnd="${timings[i].end}"></audio></par>`
+        );
+      }
+
+      smilLines.push('</body>', '</smil>');
+      const smilContent = smilLines.join('\n');
+      const smilBlob = new Blob([smilContent], { type: 'application/smil+xml' });
+
+      const smilFileName = baseName + '.smil';
+      downloadLink.href = URL.createObjectURL(smilBlob);
+      downloadLink.download = smilFileName;
+      downloadLink.textContent = `⬇ Download ${smilFileName}`;
+      downloadLink.style.display = 'block';
+    });
+  </script>
+
+</body>
+</html>
